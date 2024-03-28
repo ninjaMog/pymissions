@@ -1,14 +1,19 @@
 """ The main entrypoint for pymissions"""
 # pylint: disable=I1101:c-extension-no-member
+import ctypes
 import sys
 from hexy import HexTile, HexMap
 import numpy as np
 import pygame as pg
 
 # Default rendering settings
-VIEWPORT_PIXEL_SIZE = (1280, 720)
+# Currently we scale this down if required for smaller resolutions
+# Instead we should later consider rendering the viewport at a lower resolution
+# And changing other sizes to match (e.g. hex_radius, font_size etc.)
+VIEWPORT_PIXEL_SIZE = 3840, 2160
 MAX_FPS = 60
-HEX_RADIUS = 75
+HEX_RADIUS = 150
+FONT_SIZE = 24
 
 # This is taken directly from the Hexy module examples
 # https://github.com/RedFT/HexyExamples/blob/e1c52067894eb989d1d5ec6854cd0cde7106289d/example_hex.py#L7
@@ -69,10 +74,10 @@ def get_map_offset(hex_map: HexMap, hex_image: pg.Surface):
     y_values = [tile.position[0][1] for tile in hex_map.values()]
 
     offset = [
-        (VIEWPORT_PIXEL_SIZE[0] - (max(x_values) -
-         min(x_values)) + hex_image.get_width()) / 2,
-        (VIEWPORT_PIXEL_SIZE[1] - (max(y_values) -
-         min(y_values))) / 2
+        int((VIEWPORT_PIXEL_SIZE[0] - (max(x_values) -
+                                       min(x_values)) + hex_image.get_width()) / 2),
+        int((VIEWPORT_PIXEL_SIZE[1] - (max(y_values) -
+                                       min(y_values))) / 2)
     ]
 
     print(offset)
@@ -87,8 +92,14 @@ def main():
     """Run the game!"""
     pg.init()  # pylint: disable=E1101:no-member
 
+    # Take into account windows DPI scaling (Not sure what happens if you run this on Linux/Mac...)
+    try:
+        ctypes.windll.user32.SetProcessDPIAware()
+    except AttributeError:
+        print("Couldn't set DPIAware... We're probably not running on windows")
+
     # Initialise the display and get a surface to draw on
-    flags = pg.constants.SCALED
+    flags = pg.constants.SCALED | pg.constants.FULLSCREEN
     main_surface = pg.display.set_mode(VIEWPORT_PIXEL_SIZE, flags, vsync=1)
 
     pg.display.set_caption("PYMISSIONS")
@@ -119,7 +130,7 @@ def main():
 
     # create a font
     pg.font.init()
-    font = pg.font.SysFont("monospace", 14, True)
+    font = pg.font.SysFont("monospace", FONT_SIZE, True)
 
     # offset to draw the tiles at
     map_offset = get_map_offset(level, image)
@@ -129,6 +140,11 @@ def main():
         for event in pg.event.get():
             if event.type == pg.constants.QUIT:
                 running = False
+            if event.type == pg.constants.KEYUP:
+                print(event.dict)
+                print(pg.constants.K_ESCAPE)
+                if event.key == pg.constants.K_ESCAPE:
+                    running = False
 
         # Draw the hexes
         for tile in level.values():
