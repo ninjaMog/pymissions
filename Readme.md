@@ -6,3 +6,7 @@ Pymissions is a learning project that's hopefully going to help me relearn pytho
 
 I'll be very gradually implementing the game rules for: [Space Cadets: Away Missions
 ](https://boardgamegeek.com/boardgame/124827/space-cadets-away-missions) a game I had a lot of fun with recently, and thought it would be interesting to try and implement.
+
+## 3rd party tools used
+* Starfield.png created using https://metaphoric.com/starfield/
+* Placeholder images created using https://neural.love/ai-art-generator

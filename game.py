@@ -15,9 +15,6 @@ MAX_FPS = 60
 HEX_RADIUS = 150
 FONT_SIZE = 24
 
-# This is taken directly from the Hexy module examples
-# https://github.com/RedFT/HexyExamples/blob/e1c52067894eb989d1d5ec6854cd0cde7106289d/example_hex.py#L7
-
 
 def make_hex_surface(color, radius, border_color=(100, 100, 100), border=True, hollow=False):
     """
@@ -29,6 +26,11 @@ def make_hex_surface(color, radius, border_color=(100, 100, 100), border=True, h
     :param hollow: Does not fill hex with color if True.
     :return: A pygame surface with a hexagon drawn on it
     """
+    # This function (was) taken from the Hexy module examples
+    # I tweaked it as I think it was calculating the surface size wrong
+    # Which caused issues when trying to apply a background image to the polygon
+    # https://github.com/RedFT/HexyExamples/blob/e1c52067894eb989d1d5ec6854cd0cde7106289d/example_hex.py#L7
+
     angles_in_radians = np.deg2rad([60 * i + 30 for i in range(6)])
     x = radius * np.cos(angles_in_radians)
     y = radius * np.sin(angles_in_radians)
@@ -43,7 +45,7 @@ def make_hex_surface(color, radius, border_color=(100, 100, 100), border=True, h
 
     sorted_idxs = np.lexsort((points[:, 0], points[:, 1]))
 
-    surf_size = np.array((maxx - minx, maxy - miny)) * 2 + 1
+    surf_size = np.array((maxx - minx, maxy - miny))
     center = surf_size / 2
     surface = pg.Surface(surf_size.tolist())
     surface.set_colorkey((0, 0, 0))
@@ -80,12 +82,25 @@ def get_map_offset(hex_map: HexMap, hex_image: pg.Surface):
                                        min(y_values))) / 2)
     ]
 
-    print(offset)
     return offset
-    # min_x = min(tile.position[0] for tile in hex_map.values())
-    # print(min_x)
 
-    # return [600, 100]
+
+def apply_hex_background(image: pg.Surface):
+    """
+    Applys a background image to the provided image
+    """
+    bg_image = pg.image.load(
+        "media/images/ground_tile_lowres.jpg")
+
+    # The images aren't the same size, so we want to center the background image
+    tile_offset = (
+        (image.get_width() - bg_image.get_width()) / 2,
+        (image.get_height() - bg_image.get_width()) / 2
+    )
+
+    image.blit(bg_image, tile_offset, special_flags=pg.constants.BLEND_MULT)
+
+    return image
 
 
 def main():
@@ -127,6 +142,10 @@ def main():
     # Define what the hex looks like
     image = make_hex_surface((255, 255, 255), HEX_RADIUS)
     image_center = [image.get_width() / 2, image.get_height() / 2]
+    image = apply_hex_background(image)
+
+    # Create the background image
+    bg_image = pg.image.load("./media/images/starfield.png")
 
     # create a font
     pg.font.init()
@@ -141,10 +160,11 @@ def main():
             if event.type == pg.constants.QUIT:
                 running = False
             if event.type == pg.constants.KEYUP:
-                print(event.dict)
-                print(pg.constants.K_ESCAPE)
                 if event.key == pg.constants.K_ESCAPE:
                     running = False
+
+        # Redraw the background
+        main_surface.blit(bg_image, (0, 0))
 
         # Draw the hexes
         for tile in level.values():
