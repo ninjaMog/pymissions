@@ -26,27 +26,28 @@ def make_hex_surface(color, radius, border_color=(100, 100, 100), border=True, h
     :param hollow: Does not fill hex with color if True.
     :return: A pygame surface with a hexagon drawn on it
     """
-    # This function (was) taken from the Hexy module examples
-    # I tweaked it as I think it was calculating the surface size wrong
+    # This functionis a simplified version of the functionn in the Hexy module examples
+    # I also tweaked it as I think it was calculating the surface size wrong
     # Which caused issues when trying to apply a background image to the polygon
     # https://github.com/RedFT/HexyExamples/blob/e1c52067894eb989d1d5ec6854cd0cde7106289d/example_hex.py#L7
 
+    # Get the angels of each of the points of the hexagon
     angles_in_radians = np.deg2rad([60 * i + 30 for i in range(6)])
-    x = radius * np.cos(angles_in_radians)
-    y = radius * np.sin(angles_in_radians)
-    points = np.round(np.vstack([x, y]).T)
 
+    # Get cordinates of these pointse
+    points = np.round(np.vstack([
+        radius * np.cos(angles_in_radians), radius * np.sin(angles_in_radians)
+    ]).T)
+
+    # Get minimum and maximum locations of the points of the hex
     sorted_x = sorted(points[:, 0])
     sorted_y = sorted(points[:, 1])
-    minx = sorted_x[0]
-    maxx = sorted_x[-1]
-    miny = sorted_y[0]
-    maxy = sorted_y[-1]
+    surf_size = np.array(
+        [sorted_x[-1] - sorted_x[0], sorted_y[-1] - sorted_y[0]]
+    )
+    # calculate the center point of the surface
+    surf_center = surf_size / 2
 
-    sorted_idxs = np.lexsort((points[:, 0], points[:, 1]))
-
-    surf_size = np.array((maxx - minx, maxy - miny))
-    center = surf_size / 2
     surface = pg.Surface(surf_size.tolist())
     surface.set_colorkey((0, 0, 0))
 
@@ -56,33 +57,14 @@ def make_hex_surface(color, radius, border_color=(100, 100, 100), border=True, h
 
     # fill if not hollow.
     if not hollow:
-        pg.draw.polygon(surface, color, (points + center).tolist(), 0)
+        pg.draw.polygon(surface, color, (points + surf_center).tolist(), 0)
 
-    points[sorted_idxs[-1:-4:-1]] += [0, 1]
     # if border is true or hollow is true draw border.
     if border or hollow:
         pg.draw.lines(surface, border_color, True,
-                      (points + center).tolist(), 1)
+                      (points + surf_center).tolist(), 1)
 
     return surface
-
-
-def get_map_offset(hex_map: HexMap, hex_image: pg.Surface):
-    """
-    Calculate how far tiles should be shifted on the X and Y coordinates based on map shape
-    """
-    # We want half main surface dimension (screen) + half dimension of map
-    x_values = [tile.position[0][0] for tile in hex_map.values()]
-    y_values = [tile.position[0][1] for tile in hex_map.values()]
-
-    offset = [
-        int((VIEWPORT_PIXEL_SIZE[0] - (max(x_values) -
-                                       min(x_values)) + hex_image.get_width()) / 2),
-        int((VIEWPORT_PIXEL_SIZE[1] - (max(y_values) -
-                                       min(y_values))) / 2)
-    ]
-
-    return offset
 
 
 def apply_hex_background(image: pg.Surface):
@@ -103,8 +85,120 @@ def apply_hex_background(image: pg.Surface):
     return image
 
 
+class GameState:
+    """
+    Store information about the current state of the game
+    """
+
+    def __init__(self):
+        self.level = HexMap()
+
+    def load_level(self):
+        """
+        Load a level, currently just loads a fixed level
+        """
+        # Represent a level in hex co-ordinates
+        tiles = [
+            HexTile((0, 0), HEX_RADIUS, "A"),
+            HexTile((-1, 1), HEX_RADIUS, "B"),
+            HexTile((0, 1), HEX_RADIUS, "C"),
+            HexTile((-2, 2), HEX_RADIUS, "D"),
+            HexTile((-1, 2), HEX_RADIUS, "E"),
+            HexTile((0, 2), HEX_RADIUS, "F"),
+            HexTile((-2, 3), HEX_RADIUS, "G"),
+            HexTile((-1, 3), HEX_RADIUS, "H"),
+            HexTile((-2, 4), HEX_RADIUS, "I")
+        ]
+
+        level = HexMap()
+        for tile in tiles:
+            level[tile.axial_coordinates] = [tile]
+
+        self.level = level
+
+
+class GameRenderer:
+    """
+    Class responsible for rendering the game state to screen
+    """
+
+    def __init__(self, game_surface: pg.Surface, game_state: GameState):
+        self.surface = game_surface
+        self.game_state = game_state
+
+        # Setup images & related calculations
+        self.background_image = pg.image.load("./media/images/starfield.png")
+        self.hex_image = self.get_hex_image()
+        # offset to draw the tiles at
+        self.map_offset = self.get_map_offset()
+        # default font to use
+
+        # create a font
+        pg.font.init()
+        self.font = pg.font.SysFont("monospace", FONT_SIZE, True)
+
+    def get_hex_image(self):
+        """
+        Return an image representing a basic game tile
+        """
+        image = make_hex_surface((255, 255, 255), HEX_RADIUS)
+        image = apply_hex_background(image)
+        return image
+
+    def draw(self):
+        """
+        Draws current game state
+
+        Minimize calculations in this method, as it will be called every frame
+        """
+
+        # Redraw the background
+        self.surface.blit(self.background_image, (0, 0))
+
+        image_center = [self.hex_image.get_width(
+        ) / 2, self.hex_image.get_height() / 2]
+
+        # Draw the hexes
+        for tile in self.game_state.level.values():
+            draw_position = tile.position[0] - image_center + self.map_offset
+            self.surface.blit(self.hex_image, draw_position)
+
+        # draw IDs on the hexes
+        for tile in self.game_state.level.values():
+            text = self.font.render(str(tile.tile_id), False, (0, 0, 0))
+            text.set_alpha(160)
+            text_pos = tile.position[0] + self.map_offset
+            text_pos -= (text.get_width() / 2, text.get_height() / 2)
+            self.surface.blit(text, text_pos)
+
+    def get_map_offset(self):
+        """
+        Calculate how far tiles should be shifted on the X and Y coordinates based on map shape
+        """
+        # We want half main surface dimension (screen) + half dimension of map
+        x_values = [tile.position[0][0]
+                    for tile in self.game_state.level.values()]
+        y_values = [tile.position[0][1]
+                    for tile in self.game_state.level.values()]
+
+        offset = [
+            int((VIEWPORT_PIXEL_SIZE[0] - (max(x_values) -
+                                           min(x_values)) + self.hex_image.get_width()) / 2),
+            int((VIEWPORT_PIXEL_SIZE[1] - (max(y_values) -
+                                           min(y_values))) / 2)
+        ]
+
+        return offset
+
+
 def main():
-    """Run the game!"""
+    """initialise and run the game!"""
+
+    game_state = GameState()
+    game_state.load_level()
+
+    # Start up Pygame
+
     pg.init()  # pylint: disable=E1101:no-member
 
     # Take into account windows DPI scaling (Not sure what happens if you run this on Linux/Mac...)
@@ -113,46 +207,20 @@ def main():
     except AttributeError:
         print("Couldn't set DPIAware... We're probably not running on windows")
 
-    # Initialise the display and get a surface to draw on
-    flags = pg.constants.SCALED | pg.constants.FULLSCREEN
-    main_surface = pg.display.set_mode(VIEWPORT_PIXEL_SIZE, flags, vsync=1)
+    # Initialise the display, and get the main surface
+    main_surface = pg.display.set_mode(
+        VIEWPORT_PIXEL_SIZE,
+        pg.constants.SCALED | pg.constants.FULLSCREEN,
+        vsync=1
+    )
 
+    # Give the window a title
     pg.display.set_caption("PYMISSIONS")
+
     clock = pg.time.Clock()
     running = True
 
-    # Represent a level in hex co-ordinates
-    tiles = [
-        HexTile((0, 0), HEX_RADIUS, "A"),
-        HexTile((-1, 1), HEX_RADIUS, "B"),
-        HexTile((0, 1), HEX_RADIUS, "C"),
-        HexTile((-2, 2), HEX_RADIUS, "D"),
-        HexTile((-1, 2), HEX_RADIUS, "E"),
-        HexTile((0, 2), HEX_RADIUS, "F"),
-        HexTile((-2, 3), HEX_RADIUS, "G"),
-        HexTile((-1, 3), HEX_RADIUS, "H"),
-        HexTile((-2, 4), HEX_RADIUS, "I")
-    ]
-
-    level = HexMap()
-    for tile in tiles:
-        level[tile.axial_coordinates] = [tile]
-
-    # define what hexes look like
-    # Define what the hex looks like
-    image = make_hex_surface((255, 255, 255), HEX_RADIUS)
-    image_center = [image.get_width() / 2, image.get_height() / 2]
-    image = apply_hex_background(image)
-
-    # Create the background image
-    bg_image = pg.image.load("./media/images/starfield.png")
-
-    # create a font
-    pg.font.init()
-    font = pg.font.SysFont("monospace", FONT_SIZE, True)
-
-    # offset to draw the tiles at
-    map_offset = get_map_offset(level, image)
+    game_renderer = GameRenderer(main_surface, game_state)
 
     # main game loop
     while running:
@@ -163,21 +231,8 @@ def main():
                 if event.key == pg.constants.K_ESCAPE:
                     running = False
 
-        # Redraw the background
-        main_surface.blit(bg_image, (0, 0))
-
-        # Draw the hexes
-        for tile in level.values():
-            draw_position = tile.position[0] - image_center + map_offset
-            main_surface.blit(image, draw_position)
-
-        # draw IDs on the hexes
-        for tile in level.values():
-            text = font.render(str(tile.tile_id), False, (0, 0, 0))
-            text.set_alpha(160)
-            text_pos = tile.position[0] + map_offset
-            text_pos -= (text.get_width() / 2, text.get_height() / 2)
-            main_surface.blit(text, text_pos)
+        # Draw the current game state
+        game_renderer.draw()
 
         # flip() updates the entire display
         pg.display.flip()
